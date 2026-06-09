@@ -1,0 +1,58 @@
+services:
+  # Database Service
+  db:
+    image: postgres:16-alpine
+    container_name: velora_db
+    restart: always
+    environment:
+      POSTGRES_DB: food_delivery_db
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres} -d food_delivery_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Spring Boot Backend Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: velora_backend
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_URL=jdbc:postgresql://db:5432/food_delivery_db
+      - DB_USERNAME=${DB_USERNAME:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - JWT_SECRET=${JWT_SECRET:-your_super_secret_jwt_key_here}
+      - JWT_EXPIRATION_MS=${JWT_EXPIRATION_MS:-86400000}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-your_stripe_secret_key_here}
+      - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-your_stripe_publishable_key_here}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-your_stripe_webhook_secret_here}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # React Frontend Service served by Nginx
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_STRIPE_PUBLIC_KEY=${STRIPE_PUBLISHABLE_KEY:-your_stripe_publishable_key_here}
+    container_name: velora_frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
